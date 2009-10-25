@@ -47,6 +47,9 @@ class CodegenVisitor(Visitor):
                 return '%s*' % elem_type
             elif type.ctype in self.typemap:
                 return self.typemap[type.ctype]
+            elif '.' in type.name: # n-n-namespace!
+                willi, top = type.name.rsplit('.', 1)
+                return self.get_ooc_type(top)
             elif type.name in self.typemap:
                 return self.typemap[type.name]
             elif type.name == 'none':
@@ -56,10 +59,14 @@ class CodegenVisitor(Visitor):
             else:
                 name = oocize_type(type.name)
                 self.typemap[type.ctype] = name
-            return name
+                return name
 
     def visit_parser(self, parser):
-        return self.visit(parser.get_namespace())
+        out = []
+        for include in parser.get_includes():
+            out.append('import %s' % include.name)
+        out.extend(self.visit(parser.get_namespace()))
+        return out
 
     def visit_Namespace(self, node):
         return map(self.visit, node.nodes)
@@ -88,7 +95,10 @@ class CodegenVisitor(Visitor):
 
     def visit_Alias(self, node):
         self.typemap[node.name] = name = oocize_type(node.name)
-        cover = Cover(name, self.get_ooc_type(node.target))
+        if node.target == 'none':
+            cover = Cover(name)
+        else:
+            cover = Cover(name, self.get_ooc_type(node.target))
         return cover
        
     def visit_Constant(self, node):
@@ -121,8 +131,10 @@ class CodegenVisitor(Visitor):
             m_name = oocize(field.name)
             if isinstance(field, ast.Field):
                 attr = Attribute(m_name, self.get_ooc_type(field.type))
-            elif isinstance(field, ast.Callback):
+            elif isinstance(field, (ast.Callback, ast.Function)):
                 attr = Attribute(m_name, 'Func') # TODO: more specific.
+            else:
+                assert 0, field
             cover.add_member(attr)
         return cover
 
@@ -132,3 +144,22 @@ class CodegenVisitor(Visitor):
         cover = Cover(name, modifiers=('extern',))
         # TODO: union member getting support
         return cover
+
+    def visit_GLibObject(self, node):
+        name = oocize_type(node.name)
+        cover = Cover(name, modifiers=('extern',))
+        cover.from_ = node.name + '*'
+        self.typemap[node.name + '*'] = name
+        for member in node.methods:
+            cover.add_member(self.visit(member))
+        return cover
+
+    def visit_GLibBoxedStruct(self, node):
+        # TODO: complete this when you know what a boxed struct is
+        name = oocize_type(node.name)
+        cover = Cover(name, modifiers=('extern',))
+        self.typemap[node.name] = name
+        return cover
+
+    def visit_GLibEnum(self, node):
+        return self.visit_Enum(node) # TODO: heeeeh? any changes needed?

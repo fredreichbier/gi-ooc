@@ -41,5 +41,5 @@ class Visitor(object):
             return self.visit_default(node)
 
     def visit_default(self, node):
-        print 'no visitor for %s' % node.__class__.__name__
+        print 'no visitor for %s' % node.__class__.__name__, node
         return ''
