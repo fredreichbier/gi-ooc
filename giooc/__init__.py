@@ -1,5 +1,7 @@
+from giscanner import ast
+
 from .wraplib.odict import odict
-from .wraplib.ooc import Function, Cover, Attribute
+from .wraplib.ooc import Function, Cover, Attribute, Class
 from .utils import Visitor, oocize, upper_first, oocize_type
 
 OOC_TYPEMAP = {
@@ -23,6 +25,7 @@ OOC_TYPEMAP = {
     'uint32': 'UInt32',
     'int64': 'Int64',
     'uint64': 'UInt64',
+    'double': 'Double',
 }
 
 CONSTANT_RESOLVERS = {
@@ -39,12 +42,17 @@ class CodegenVisitor(Visitor):
         if isinstance(type, basestring):
             return self.typemap.get(type, type)
         else:
-            if type.ctype in self.typemap:
+            if isinstance(type, ast.Array):
+                elem_type = self.get_ooc_type(type.element_type)
+                return '%s*' % elem_type
+            elif type.ctype in self.typemap:
                 return self.typemap[type.ctype]
             elif type.name in self.typemap:
                 return self.typemap[type.name]
             elif type.name == 'none':
                 return None
+            elif type.ctype is None:
+                assert 0, type
             else:
                 name = oocize_type(type.name)
                 self.typemap[type.ctype] = name
@@ -92,4 +100,35 @@ class CodegenVisitor(Visitor):
         self.typemap[node.name] = name = oocize_type(node.name)
         # TODO: we need more specific function signatures
         cover = Cover(name, 'Func')
+        return cover
+
+    def visit_Enum(self, node):
+        name = oocize_type(node.name)
+        self.typemap[node.name] = 'Int' # enums are ints.
+        klass = Class(name)
+        for member in node.members:
+            m_name = oocize(member.name)
+            attr = Attribute(m_name, 'Int', ('const', 'static'), member.value)
+            klass.add_member(attr)
+        return klass
+
+    def visit_Record(self, node):
+        name = oocize_type(node.name)
+        self.typemap[node.name] = name
+        cover = Cover(name, modifiers=('extern',))
+        for field in node.fields:
+            # TODO: bitfield!
+            m_name = oocize(field.name)
+            if isinstance(field, ast.Field):
+                attr = Attribute(m_name, self.get_ooc_type(field.type))
+            elif isinstance(field, ast.Callback):
+                attr = Attribute(m_name, 'Func') # TODO: more specific.
+            cover.add_member(attr)
+        return cover
+
+    def visit_Union(self, node):
+        name = oocize_type(node.name)
+        self.typemap[node.name] = name
+        cover = Cover(name, modifiers=('extern',))
+        # TODO: union member getting support
         return cover
