@@ -2,7 +2,7 @@ from giscanner import ast
 
 from .wraplib.odict import odict
 from .wraplib.ooc import Function, Cover, Attribute, Class
-from .utils import Visitor, oocize, upper_first, oocize_type
+from .utils import Visitor, oocize, upper_first, oocize_type, censor
 
 OOC_TYPEMAP = {
     'gint': 'Int',
@@ -11,8 +11,15 @@ OOC_TYPEMAP = {
     'gboolean': 'Bool',
     'gchar': 'Char',
     'gchar*': 'String',
+    'gstring': 'GString', # TODO?
+    'gunichar': 'Int32', # TODO?
+    'gunichar2': 'Int16', # TODO?
     'gsize': 'SizeT',
     'gssize': 'SSizeT',
+    'gshort': 'Short',
+    'gushort': 'UShort',
+    'short': 'Short',
+    'ushort': 'UShort',
     'utf8': 'String',
     'any': 'Pointer',
     'int': 'Int',
@@ -26,17 +33,24 @@ OOC_TYPEMAP = {
     'int64': 'Int64',
     'uint64': 'UInt64',
     'double': 'Double',
+    'long': 'Long',
+    'ulong': 'ULong',
+    'glong': 'Long',
+    'gulong': 'ULong',
+    'long double': 'LDouble',
+    'time_t': 'TimeT', # TODO: include `os/Time`
 }
 
 CONSTANT_RESOLVERS = {
     'int': lambda s: s,
-    'utf8': lambda s: '"%s"' % s,
+    'utf8': lambda s: '"%s"' % s.encode('string-escape'),
     'double': lambda s: s,
 }
 
 class CodegenVisitor(Visitor):
     def __init__(self):
         self.typemap = OOC_TYPEMAP.copy()
+        self.ctypes = {}
 
     def get_ooc_type(self, type):
         if isinstance(type, basestring):
@@ -45,19 +59,23 @@ class CodegenVisitor(Visitor):
             if isinstance(type, ast.Array):
                 elem_type = self.get_ooc_type(type.element_type)
                 return '%s*' % elem_type
-            elif type.ctype in self.typemap:
-                return self.typemap[type.ctype]
-            elif '.' in type.name: # n-n-namespace!
-                willi, top = type.name.rsplit('.', 1)
-                return self.get_ooc_type(top)
             elif type.name in self.typemap:
                 return self.typemap[type.name]
-            elif type.name == 'none':
+            #            elif type.ctype is None:
+#                assert 0, type
+            elif '.' in type.name: # n-n-namespace!
+                willi, top = type.name.rsplit('.', 1)
+                return self.get_ooc_type(ast.Type(top, ctype=top))
+            elif type.ctype is not None:
+                if '*' in type.ctype:
+                    return '%s*' % self.get_ooc_type(ast.Type(type.name, ctype=type.ctype[:-1]))
+                elif type.ctype in self.typemap:
+                    return self.typemap[type.ctype]
+            if type.name == 'none':
                 return None
-            elif type.ctype is None:
-                assert 0, type
             else:
                 name = oocize_type(type.name)
+                assert type.ctype is not None
                 self.typemap[type.ctype] = name
                 return name
 
@@ -81,7 +99,7 @@ class CodegenVisitor(Visitor):
             if parameter.type.name == '<varargs>':
                 varargs = True
             else:
-                args[parameter.name] = self.get_ooc_type(parameter.type)
+                args[censor(parameter.name)] = self.get_ooc_type(parameter.type)
         # return type
         rettype = self.get_ooc_type(node.retval.type)
         # put em together
@@ -103,13 +121,14 @@ class CodegenVisitor(Visitor):
        
     def visit_Constant(self, node):
         value = CONSTANT_RESOLVERS[node.type.name](node.value)
-        attr = Attribute(node.name, self.get_ooc_type(node.type), ('const',), value)
+        attr = Attribute(censor(node.name), self.get_ooc_type(node.type), ('const',), value)
         return attr
 
     def visit_Callback(self, node):
         self.typemap[node.name] = name = oocize_type(node.name)
         # TODO: we need more specific function signatures
         cover = Cover(name, 'Func')
+        cover.type = node
         return cover
 
     def visit_Enum(self, node):
@@ -118,14 +137,14 @@ class CodegenVisitor(Visitor):
         klass = Class(name)
         for member in node.members:
             m_name = oocize(member.name)
-            attr = Attribute(m_name, 'Int', ('const', 'static'), member.value)
+            attr = Attribute(m_name, 'Int', ('static', 'const'), member.value)
             klass.add_member(attr)
         return klass
 
     def visit_Record(self, node):
         name = oocize_type(node.name)
         self.typemap[node.name] = name
-        cover = Cover(name, modifiers=('extern',))
+        cover = Cover(name, from_=node.symbol)
         for field in node.fields:
             # TODO: bitfield!
             m_name = oocize(field.name)
@@ -135,19 +154,20 @@ class CodegenVisitor(Visitor):
                 attr = Attribute(m_name, 'Func') # TODO: more specific.
             else:
                 assert 0, field
+            attr.modifiers = ('extern(%s)' % field.name,)
             cover.add_member(attr)
         return cover
 
     def visit_Union(self, node):
         name = oocize_type(node.name)
         self.typemap[node.name] = name
-        cover = Cover(name, modifiers=('extern',))
+        cover = Cover(name, from_=node.symbol)
         # TODO: union member getting support
         return cover
 
     def visit_GLibObject(self, node):
         name = oocize_type(node.name)
-        cover = Cover(name, modifiers=('extern',))
+        cover = Cover(name, from_=node.ctype)
         cover.from_ = node.name + '*'
         self.typemap[node.name + '*'] = name
         for member in node.methods:
@@ -157,9 +177,19 @@ class CodegenVisitor(Visitor):
     def visit_GLibBoxedStruct(self, node):
         # TODO: complete this when you know what a boxed struct is
         name = oocize_type(node.name)
-        cover = Cover(name, modifiers=('extern',))
+        cover = Cover(name, from_=node.ctype)
         self.typemap[node.name] = name
         return cover
 
     def visit_GLibEnum(self, node):
         return self.visit_Enum(node) # TODO: heeeeh? any changes needed?
+
+    def visit_GLibInterface(self, node):
+        name = oocize_type(node.name)
+        cover = Cover(name, from_=node.ctype)
+        cover.from_ = node.name + '*'
+        self.typemap[node.name + '*'] = name
+        # TODO: what to do with teh interface?
+        return cover
+
+

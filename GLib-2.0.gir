@@ -209,23 +209,6 @@ date to include new hashing algorithm types."
         </parameter>
       </parameters>
     </callback>
-    <record name="Completion" c:type="GCompletion">
-      <field name="items" writable="1">
-        <type name="List" c:type="GList*"/>
-      </field>
-      <field name="func" writable="1">
-        <type name="CompletionFunc" c:type="GCompletionFunc"/>
-      </field>
-      <field name="prefix" writable="1">
-        <type name="utf8" c:type="gchar*"/>
-      </field>
-      <field name="cache" writable="1">
-        <type name="List" c:type="GList*"/>
-      </field>
-      <field name="strncmp_func" writable="1">
-        <type name="CompletionStrncmpFunc" c:type="GCompletionStrncmpFunc"/>
-      </field>
-    </record>
     <callback name="CompletionFunc" c:type="GCompletionFunc">
       <return-value transfer-ownership="full">
         <type name="utf8" c:type="gchar*"/>
@@ -1238,6 +1221,23 @@ when doing a deep-copy of a tree."
       </field>
       <field name="prev" writable="1">
         <type name="List" c:type="GList*"/>
+      </field>
+    </record>
+    <record name="Completion" c:type="GCompletion">
+      <field name="items" writable="1">
+        <type name="List" c:type="GList*"/>
+      </field>
+      <field name="func" writable="1">
+        <type name="CompletionFunc" c:type="GCompletionFunc"/>
+      </field>
+      <field name="prefix" writable="1">
+        <type name="utf8" c:type="gchar*"/>
+      </field>
+      <field name="cache" writable="1">
+        <type name="List" c:type="GList*"/>
+      </field>
+      <field name="strncmp_func" writable="1">
+        <type name="CompletionStrncmpFunc" c:type="GCompletionStrncmpFunc"/>
       </field>
     </record>
     <callback name="LogFunc" c:type="GLogFunc">

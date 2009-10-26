@@ -9,8 +9,10 @@ from giooc import CodegenVisitor
 from giooc.wraplib.codegen import Codegen
 
 parser = girparser.GIRParser()
-parser.parse('Pango-1.0.gir')
+parser.parse(sys.argv[1])
 
 gen = CodegenVisitor()
+
 print Codegen()(gen.visit_parser(parser)).buf
+
 
