@@ -2,6 +2,7 @@ import re
 
 ALIASES = {
     'String': 'GString',
+    'Time': 'GTime',
 }
 
 def upper_first(name):

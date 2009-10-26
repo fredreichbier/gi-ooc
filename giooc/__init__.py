@@ -143,19 +143,23 @@ class CodegenVisitor(Visitor):
 
     def visit_Record(self, node):
         name = oocize_type(node.name)
-        self.typemap[node.name] = name
-        cover = Cover(name, from_=node.symbol)
-        for field in node.fields:
-            # TODO: bitfield!
-            m_name = oocize(field.name)
-            if isinstance(field, ast.Field):
-                attr = Attribute(m_name, self.get_ooc_type(field.type))
-            elif isinstance(field, (ast.Callback, ast.Function)):
-                attr = Attribute(m_name, 'Func') # TODO: more specific.
-            else:
-                assert 0, field
-            attr.modifiers = ('extern(%s)' % field.name,)
-            cover.add_member(attr)
+        if node.fields:
+            self.typemap[node.name] = name
+            cover = Cover(name, from_=node.symbol)
+            for field in node.fields:
+                # TODO: bitfield!
+                m_name = oocize(field.name)
+                if isinstance(field, ast.Field):
+                    attr = Attribute(m_name, self.get_ooc_type(field.type))
+                elif isinstance(field, (ast.Callback, ast.Function)):
+                    attr = Attribute(m_name, 'Func') # TODO: more specific.
+                else:
+                    assert 0, field
+                attr.modifiers = ('extern(%s)' % field.name,)
+                cover.add_member(attr)
+        else:
+            self.typemap[node.name + '*'] = name
+            cover = Cover(name, from_=node.symbol + '*')
         return cover
 
     def visit_Union(self, node):
