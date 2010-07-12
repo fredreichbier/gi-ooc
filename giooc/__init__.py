@@ -38,7 +38,12 @@ OOC_TYPEMAP = {
     'glong': 'Long',
     'gulong': 'ULong',
     'long double': 'LDouble',
-    'time_t': 'TimeT', # TODO: include `os/Time`
+    'time_t': 'TimeT',
+}
+
+TYPE_IMPORTS = {
+    'gssize': 'ssize_t',
+    'time_t': 'os/Time',
 }
 
 CONSTANT_RESOLVERS = {
@@ -51,16 +56,28 @@ class CodegenVisitor(Visitor):
     def __init__(self):
         self.typemap = OOC_TYPEMAP.copy()
         self.ctypes = {}
+        self.imports = set()
+
+    def get_from_typemap(self, name):
+        if name in self.typemap:
+            if name in TYPE_IMPORTS:
+                self.imports.add(TYPE_IMPORTS[name])
+            return self.typemap[name]
+        else:
+            raise KeyError(name)
 
     def get_ooc_type(self, type):
         if isinstance(type, basestring):
-            return self.typemap.get(type, type)
+            try:
+                return self.get_from_typemap(type)
+            except KeyError:
+                return type
         else:
             if isinstance(type, ast.Array):
                 elem_type = self.get_ooc_type(type.element_type)
                 return '%s*' % elem_type
             elif type.name in self.typemap:
-                return self.typemap[type.name]
+                return self.get_from_typemap(type.name)
             #            elif type.ctype is None:
 #                assert 0, type
             elif '.' in type.name: # n-n-namespace!
@@ -70,7 +87,7 @@ class CodegenVisitor(Visitor):
                 if '*' in type.ctype:
                     return '%s*' % self.get_ooc_type(ast.Type(type.name, ctype=type.ctype[:-1]))
                 elif type.ctype in self.typemap:
-                    return self.typemap[type.ctype]
+                    return self.get_from_typemap(type.ctype)
             if type.name == 'none':
                 return None
             else:
@@ -83,7 +100,9 @@ class CodegenVisitor(Visitor):
         out = []
         for include in parser.get_includes():
             out.append('import %s' % include.name)
-        out.extend(self.visit(parser.get_namespace()))
+        code = self.visit(parser.get_namespace())
+        out.extend(['import %s' % i for i in self.imports])
+        out.extend(code)
         return out
 
     def visit_Namespace(self, node):
