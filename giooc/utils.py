@@ -1,10 +1,5 @@
 import re
 
-ALIASES = {
-    'String': 'GString',
-    'Time': 'GTime',
-}
-
 def upper_first(name):
     if not name:
         return name
@@ -28,9 +23,7 @@ def oocize(name):
         name = '_' + name
     return censor(name)
 
-def oocize_type(name):
-    if name in ALIASES:
-        return ALIASES[name]
+def oocize_type(name, prefix=True):
     if not name:
         return '_' # TODO: that should not be necessary  
     # set_this -> setThis
@@ -41,7 +34,7 @@ def oocize_type(name):
     name = re.sub('_([^_]*)', lambda m: upper_first(oocize(m.group(1))), name)
     if underscored:
         name = '_' + name
-    return censor(upper_first(name))
+    return ('OG' if prefix else '') + censor(upper_first(name))
 
 class Visitor(object):
     def visit(self, node):

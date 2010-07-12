@@ -63,6 +63,19 @@ class Attribute(CodegenBase):
             line += ' = %s' % self.value
         return line
 
+class ImplicitAttribute(CodegenBase):
+    def __init__(self, name, value='', modifiers=()):
+        self.name = name
+        self.value = value
+        self.modifiers = modifiers
+
+    def generate_code(self):
+        if self.modifiers:
+            line = '%s := %s %s' % (self.name, ' '.join(self.modifiers), self.value)
+        else:
+            line = '%s := %s' % (self.name, self.value)
+        return line
+
 class Cover(CodegenBase):
     def __init__(self, name, from_='', extends='', modifiers=None):
         self.name = name

@@ -1,7 +1,7 @@
 from giscanner import ast
 
 from .wraplib.odict import odict
-from .wraplib.ooc import Function, Cover, Attribute, Class
+from .wraplib.ooc import Function, Cover, Attribute, Class, ImplicitAttribute
 from .utils import Visitor, oocize, upper_first, oocize_type, censor
 
 OOC_TYPEMAP = {
@@ -114,20 +114,21 @@ class CodegenVisitor(Visitor):
     def visit_Alias(self, node):
         self.typemap[node.name] = name = oocize_type(node.name)
         if node.target == 'none':
-            cover = Cover(name)
+            cover = Cover(name, modifiers=['extern'])
         else:
-            cover = Cover(name, self.get_ooc_type(node.target))
+            cover = Cover(name, self.get_ooc_type(node.target), modifiers=['extern'])
         return cover
        
     def visit_Constant(self, node):
         value = CONSTANT_RESOLVERS[node.type.name](node.value)
-        attr = Attribute(censor(node.name), self.get_ooc_type(node.type), ('const',), value)
+        #attr = Attribute(censor(node.name), self.get_ooc_type(node.type), ('const',), value)
+        attr = ImplicitAttribute(censor(node.name), value, ('const',)) # TODO: no! please explicit!
         return attr
 
     def visit_Callback(self, node):
         self.typemap[node.name] = name = oocize_type(node.name)
         # TODO: we need more specific function signatures
-        cover = Cover(name, 'Func')
+        cover = Cover(name, 'Func', modifiers=['extern'])
         cover.type = node
         return cover
 
@@ -145,13 +146,15 @@ class CodegenVisitor(Visitor):
         name = oocize_type(node.name)
         if node.fields:
             self.typemap[node.name] = name
-            cover = Cover(name, from_=node.symbol)
+            cover = Cover(name, from_=node.symbol, modifiers=['extern'])
             for field in node.fields:
                 # TODO: bitfield!
                 m_name = oocize(field.name)
                 if isinstance(field, ast.Field):
                     attr = Attribute(m_name, self.get_ooc_type(field.type))
                 elif isinstance(field, (ast.Callback, ast.Function)):
+                    if not field.name:
+                        continue # TODO: don't skip this stuff. it's g_param_spec_char!
                     attr = Attribute(m_name, 'Func') # TODO: more specific.
                 else:
                     assert 0, field
@@ -159,19 +162,19 @@ class CodegenVisitor(Visitor):
                 cover.add_member(attr)
         else:
             self.typemap[node.name + '*'] = name
-            cover = Cover(name, from_=node.symbol + '*')
+            cover = Cover(name, from_=node.symbol + '*', modifiers=['extern'])
         return cover
 
     def visit_Union(self, node):
         name = oocize_type(node.name)
         self.typemap[node.name] = name
-        cover = Cover(name, from_=node.symbol)
+        cover = Cover(name, from_=node.symbol, modifiers=['extern'])
         # TODO: union member getting support
         return cover
 
     def visit_GLibObject(self, node):
         name = oocize_type(node.name)
-        cover = Cover(name, from_=node.ctype)
+        cover = Cover(name, from_=node.ctype, modifiers=['extern'])
         cover.from_ = node.name + '*'
         self.typemap[node.name + '*'] = name
         for member in node.methods:
@@ -181,7 +184,7 @@ class CodegenVisitor(Visitor):
     def visit_GLibBoxedStruct(self, node):
         # TODO: complete this when you know what a boxed struct is
         name = oocize_type(node.name)
-        cover = Cover(name, from_=node.ctype)
+        cover = Cover(name, from_=node.symbol, modifiers=['extern'])
         self.typemap[node.name] = name
         return cover
 
@@ -190,7 +193,7 @@ class CodegenVisitor(Visitor):
 
     def visit_GLibInterface(self, node):
         name = oocize_type(node.name)
-        cover = Cover(name, from_=node.ctype)
+        cover = Cover(name, from_=node.ctype, modifiers=['extern'])
         cover.from_ = node.name + '*'
         self.typemap[node.name + '*'] = name
         # TODO: what to do with teh interface?
